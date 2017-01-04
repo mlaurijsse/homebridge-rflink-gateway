@@ -5,7 +5,7 @@ var debug = process.env.hasOwnProperty('RFLINK_DEBUG') ? consoleDebug : function
 
 
 const     DEFAULT_COMMAND_DELAY = 0,
-          DEFAULT_COMMAND_REPEAT = 1,
+          DEFAULT_COMMAND_REPEAT = 0,
           DEFAULT_DEVICE = '/dev/tty.usbmodemFA131',
           DEFAULT_BAUDRATE = 57600;
 
@@ -65,7 +65,7 @@ RFLinkController.prototype._createSerial = function () {
 
     return settlePromise(self._serialInit).then(function () {
 
-        return self._serialInit = new Promise(function (resolve, reject) {
+        return (self._serialInit = new Promise(function (resolve, reject) {
             if (self.serial) {
                 return resolve();
             }
@@ -96,7 +96,7 @@ RFLinkController.prototype._createSerial = function () {
                   return reject(err);
                 }
             }
-        });
+        }));
     });
 };
 
@@ -106,7 +106,7 @@ RFLinkController.prototype._sendCommand = function (command) {
   var buffer = new Buffer(command,'ascii');
   self = this;
 
-  return self._sendRequest = settlePromise(self._sendRequest).then(function () {
+  return (self._sendRequest = settlePromise(self._sendRequest).then(function () {
 
     return new Promise(function (resolve, reject) {
       self._createSerial().then(function () {
@@ -129,7 +129,7 @@ RFLinkController.prototype._sendCommand = function (command) {
         return reject(error);
       });
     });
-  });
+  }));
 };
 
 //
@@ -146,9 +146,9 @@ RFLinkController.prototype.sendCommands = function (varArgArray) {
         varArgs = arguments,
         self = this;
 
-        return self._lastRequest = settlePromise(self._lastRequest).then(function () {
+        return (self._lastRequest = settlePromise(self._lastRequest).then(function () {
 
-          for (var r = 0; r < self._commandRepeat; r++) {
+          for (var r = 0; r <= self._commandRepeat; r++) {
             for (var i = 0; i < varArgs.length; i++) {
               var arg = varArgs[i];
               if (((arg.length) > 0) && (arg[0] instanceof Array)) {
@@ -163,7 +163,7 @@ RFLinkController.prototype.sendCommands = function (varArgArray) {
             }
           }
           return settlePromises(stackedCommands);
-        });
+        }));
 };
 
 
@@ -176,9 +176,9 @@ RFLinkController.prototype.pause = function (ms) {
     var self = this;
     ms = ms || 100;
 
-    return self._lastRequest = settlePromise(self._lastRequest).then(function () {
+    return (self._lastRequest = settlePromise(self._lastRequest).then(function () {
         return Promise.delay(ms);
-    });
+    }));
 };
 
 
@@ -189,7 +189,7 @@ RFLinkController.prototype.pause = function (ms) {
 RFLinkController.prototype.close = function () {
     var self = this;
 
-    return self._lastRequest = settlePromise(self._lastRequest).then(function () {
+    return (self._lastRequest = settlePromise(self._lastRequest).then(function () {
         if (self.serial) {
             self.serial.close(function () {
               delete self.serial;
@@ -198,7 +198,7 @@ RFLinkController.prototype.close = function () {
         } else {
           return Promise.resolve();
         }
-    });
+    }));
 };
 
 

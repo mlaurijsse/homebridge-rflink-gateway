@@ -1,5 +1,5 @@
 var inherits = require('util').inherits;
-var SerialPort = require("serialport").SerialPort;
+var SerialPort = require("serialport");
 var RFLink = require('./rflink');
 var Service, Characteristic;
 
@@ -72,7 +72,9 @@ RFLinkPlatform.prototype._addDevices = function(bridgeConfig) {
   for (var i = 0; i < devicesLength; i++) {
     if ( !! bridgeConfig.devices[i]) {
       dev = new RFLinkAccessory(this.log, bridgeConfig.devices[i], bridgeController);
-      devices.push(dev);
+      if (dev) {
+        devices.push(dev);
+      }
     }
   }
   this._devices = devices;
@@ -81,24 +83,23 @@ RFLinkPlatform.prototype._addDevices = function(bridgeConfig) {
 
 RFLinkPlatform.prototype._dataHandler = function(data) {
   data = data.split(';');
+  if (data.length > 5) {
+    data[3] = (data[3]!==undefined)?data[3].split('=').pop():null;
+    //data[3] = data[3].length < 6 ? "0".repeat(6-data[3].length) + data[3] : data[3];
+    data[4] = (data[4]!==undefined)?data[4].split('=').pop():null;
 
-  data[3] = (data[3]!==undefined)?data[3].split('=').pop():null;
-  data[3] = data[3].length < 6 ? "0".repeat(6-data[3].length) + data[3] : data[3];
-  data[4] = (data[4]!==undefined)?data[4].split('=').pop():null;
+    var packet = {
+      type: data[0],
+      id: data[1],
+      protocol: data[2],
+      address: data[3],
+      channel: data[4],
+      command: data[5]
+    };
 
-  var packet = {
-    type: data[0],
-    id: data[1],
-    protocol: data[2],
-    address: data[3],
-    channel: data[4],
-    command: data[5]
-  };
-  var dev = this._devices.find(function(element){
-    return (packet.protocol == element.rflink[0] && packet.address == element.rflink[1] && packet.channel == element.rflink[2]);
-  });
-  if (dev) {
-    dev.parseCommand(packet.command);
+    this._devices.forEach(function (device) {
+      device.parsePacket(packet);
+    });
   }
 };
 
@@ -111,10 +112,45 @@ function RFLinkAccessory(log, config, controller) {
   this.controller = controller;
   this.name = config.name;
   this.type = config.type;
-  this.rflink = [
-    config.protocol,
-    config.address,
-    config.channel];
+  this.protocol = config.protocol;
+  this.address = config.address;
+  this.channels = config.channels;
+  this.services = Array();
+
+  // Add homekit service types
+  this.channels.forEach(function (channel) {
+    if (channel.name === undefined) {
+      channel.name = this.name + ' ' + this.channel;
+    }
+    if (channel.type === undefined) {
+      channel.type = this.type;
+    }
+
+      service = new Service[channel.type](channel.name, channel.channel);
+      service.channel = channel.channel;
+      service.type = channel.type;
+      service.name = channel.name;
+      service.device = this;
+      service.lastCommand = '';
+      service.parsePacket = this.parsePacket[channel.type];
+
+      // if channel is of writable type
+      if (service.type == 'Lightbulb' || service.type == 'Switch') {
+        service.getCharacteristic(Characteristic.On).on('set', this.setOn.bind(service));
+      }
+
+      if (channel.dimrange) {
+        service.addCharacteristic(new Characteristic.Brightness())
+          .on('set', this.setBrightness.bind(service));
+        service.dimrange = channel.dimrange;
+      }
+
+
+      // add to services stack
+      this.services.push(service);
+
+  }.bind(this));
+
 
   // Set device information
   this.informationService = new Service.AccessoryInformation();
@@ -122,42 +158,89 @@ function RFLinkAccessory(log, config, controller) {
     .setCharacteristic(Characteristic.Manufacturer, "RFLink")
     .setCharacteristic(Characteristic.Model, this.protocol);
 
-  // Add homekit Switch service
-  if (this.type == 'lightbulb') {
-    this.service = new Service.Lightbulb(this.name);
-  } else {
-    this.service = new Service.Switch(this.name);
-  }
-
-  this.service
-  .getCharacteristic(Characteristic.On)
-  .on('set', this.setOn.bind(this));
-
-  this.log("Added RFLink device: %s, type: %s, protocol: %s, address: %#08x, channel: %d", this.name, this.type, this.protocol, this.address, this.channel);
+  this.log("Added RFLink device: %s, protocol: %s, address: %s, channels: %d", this.name, this.protocol, this.address, this.channels.length);
 
 }
 
 RFLinkAccessory.prototype.getServices = function() {
-  return [this.informationService, this.service];
+  return this.services.concat(this.informationService);
 };
 
 
 RFLinkAccessory.prototype.setOn = function(on, callback, context) {
-
   if (context !== 'RFLink') {
-    var cmd = '10;' + this.rflink.join(';') + (on?";ON;\n":";OFF;\n");
-    this.controller.sendCommands(cmd);
-    this.log("Device: %s, switched: %d, by command: %s", this.name, on, cmd);
+    var cmd = '10;' +
+        this.device.protocol + ';' +
+        this.device.address + ';' +
+        this.channel + (on?";ON;\n":";OFF;\n");
+
+    if (cmd != this.lastCommand) {
+      this.device.controller.sendCommands(cmd);
+      this.lastCommand = cmd;
+      //    this.device.log("Channel: %s, switched: %d, by command: %s", this.channel, on, cmd);
+    }
+
   }
 
   return callback(null);
 };
 
-RFLinkAccessory.prototype.parseCommand = function(command) {
-    if (command == 'CMD=ON') {
-      this.service.getCharacteristic(Characteristic.On).setValue(1, false, 'RFLink');
-    } else if (command == 'CMD=OFF') {
-      this.service.getCharacteristic(Characteristic.On).setValue(0, false, 'RFLink');
+RFLinkAccessory.prototype.setBrightness = function(brightness, callback, context) {
+  if (context !== 'RFLink') {
+    brightnessScaled = Math.round(brightness * this.dimrange / 100);
+    var cmd = '10;' +
+        this.device.protocol + ';' +
+        this.device.address + ';' +
+        this.channel + ';' +
+        brightnessScaled + ';\n';
+
+    if (cmd != this.lastCommand) {
+        this.device.controller.sendCommands(cmd);
+        this.lastCommand = cmd;
     }
 
+    if (brightness === 0) {
+      this.getCharacteristic(Characteristic.On).setValue(0, false, 'RFLink');
+    } else {
+      this.getCharacteristic(Characteristic.On).setValue(1, false, 'RFLink');
+    }
+//    this.device.log("Channel: %s, brightness: %d, by command: %s", this.channel, brightness, cmd);
+  }
+  return callback(null);
+};
+
+RFLinkAccessory.prototype.parsePacket = function(packet) {
+  if (packet.protocol == this.protocol && packet.address == this.address) {
+    this.services.forEach(function (service) {
+      service.parsePacket(packet);
+    });
+  }
+};
+
+RFLinkAccessory.prototype.parsePacket.Lightbulb = function (packet) {
+  if(packet.channel == this.channel) {
+    if (packet.command == 'CMD=ON') {
+      this.getCharacteristic(Characteristic.On).setValue(1, false, 'RFLink');
+    } else if (packet.command == 'CMD=OFF') {
+      this.getCharacteristic(Characteristic.On).setValue(0, false, 'RFLink');
+    }
+  }
+};
+
+RFLinkAccessory.prototype.parsePacket.Switch = RFLinkAccessory.prototype.parsePacket.Lightbulb;
+
+RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(packet) {
+  if(packet.channel == this.channel) {
+    if (packet.command == 'CMD=ON') {
+      this.getCharacteristic(Characteristic.ProgrammableSwitchOutputState).setValue(1, false, 'RFLink');
+    } else if (packet.command == 'CMD=OFF') {
+      this.getCharacteristic(Characteristic.ProgrammableSwitchOutputState).setValue(0, false, 'RFLink');
+    }
+  }
+};
+
+RFLinkAccessory.prototype.parsePacket.StatelessProgrammableSwitch = function(packet) {
+    if(packet.channel == this.channel && packet.command == 'CMD=' + this.command) {
+      this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(1, false, 'RFLink');
+    }
 };
