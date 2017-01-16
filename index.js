@@ -122,6 +122,9 @@ function RFLinkAccessory(log, config, controller) {
   this.channels.forEach(function (channel) {
     if (channel.name === undefined) {
       channel.name = this.name + ' ' + this.channel;
+      if (channel.type == "StatelessProgrammableSwitch") {
+        channel.name = channel.name + ' ' + channel.command;
+      }
     }
     if (channel.type === undefined) {
       channel.type = this.type;
