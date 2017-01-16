@@ -121,7 +121,7 @@ function RFLinkAccessory(log, config, controller) {
   // Add homekit service types
   this.channels.forEach(function (channel) {
     if (channel.name === undefined) {
-      channel.name = this.name + ' ' + this.channel;
+      channel.name = this.name + ' ' + channel.channel;
       if (channel.type == "StatelessProgrammableSwitch") {
         channel.name = channel.name + ' ' + channel.command;
       }
