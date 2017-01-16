@@ -66,6 +66,7 @@ Example config.json:
                   {
                     "channel": 4,
                     "type": "StatelessProgrammableSwitch",
+                    "command": "ON",
                     "name": "Trigger"
                   },
                   {
@@ -99,4 +100,4 @@ By adding `dimrange` to a channel, the brightness characteristic will be enabled
 
 `delay` sets the delay used between commands to avoid flooding RFLink.
 
-`repeat` sets the number of time a command is resent to RFLink. In some setups (e.g. NewKaku dimmers), this might yield undesired results. 
+`repeat` sets the number of time a command is resent to RFLink. In some setups (e.g. NewKaku dimmers), this might yield undesired results.

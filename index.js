@@ -117,6 +117,7 @@ function RFLinkAccessory(log, config, controller) {
   this.channels = config.channels;
   this.services = Array();
 
+  var i = 0;
   // Add homekit service types
   this.channels.forEach(function (channel) {
     if (channel.name === undefined) {
@@ -126,7 +127,7 @@ function RFLinkAccessory(log, config, controller) {
       channel.type = this.type;
     }
 
-      service = new Service[channel.type](channel.name, channel.channel);
+      service = new Service[channel.type](channel.name, i);
       service.channel = channel.channel;
       service.type = channel.type;
       service.name = channel.name;
@@ -139,6 +140,12 @@ function RFLinkAccessory(log, config, controller) {
         service.getCharacteristic(Characteristic.On).on('set', this.setOn.bind(service));
       }
 
+      // Set command if StatelessProgrammableSwitch
+      if(service.type == 'StatelessProgrammableSwitch') {
+        service.command = channel.command;
+      }
+
+      // Add brightness Characteristic if dimrange option is set
       if (channel.dimrange) {
         service.addCharacteristic(new Characteristic.Brightness())
           .on('set', this.setBrightness.bind(service));
@@ -148,7 +155,7 @@ function RFLinkAccessory(log, config, controller) {
 
       // add to services stack
       this.services.push(service);
-
+      i++;
   }.bind(this));
 
 
@@ -242,5 +249,8 @@ RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(pack
 RFLinkAccessory.prototype.parsePacket.StatelessProgrammableSwitch = function(packet) {
     if(packet.channel == this.channel && packet.command == 'CMD=' + this.command) {
       this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(1, false, 'RFLink');
+      setTimeout(function() {
+        this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(0, false, 'RFLink');
+      }.bind(this), 1000);
     }
 };
