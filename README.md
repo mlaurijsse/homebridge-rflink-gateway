@@ -1,4 +1,4 @@
-# Fidelio Platform
+# RFLink Platform
 This is a plugin for [RFLink](http://www.nemcon.nl/blog2/) integration in [Homebridge](https://github.com/nfarina/homebridge).
 
 ## Install
@@ -41,43 +41,20 @@ Example config.json:
                   },
                   {
                     "channel": 4,
-                    "type": "Lightbulb",
-                    "name": "Bedroom"
+                    "type": "StatelessProgrammableSwitch",
+                    "name": "Button"
                   }
                 ]
               },
               {
-                "name": "Smartwaves",
+                "name": "Remote",
                 "protocol": "NewKaku",
                 "address": "0202a000",
-                "channels": [
-                  {
-                    "channel": 2,
-                    "type": "Lightbulb",
-                    "name": "Kitchen",
-                    "dimrange": 15
-                  },
-                  {
-                    "channel": 3,
-                    "type": "Lightbulb",
-                    "name": "Nightstand",
-                    "dimrange": 15
-                  },
-                  {
-                    "channel": 4,
-                    "type": "StatelessProgrammableSwitch",
-                    "command": "ON",
-                    "name": "Trigger"
-                  },
-                  {
-                    "channel": 5,
-                    "type": "StatefulProgrammableSwitch",
-                    "name": "Switch setting"
-                  }
-                ]
+                "type": "StatelessProgrammableSwitch"
+                "channels": [ 1, 2, 3, 4, "all"]
               }
             ],
-            "delay": 100,
+            "delay": 500,
             "repeat":  0
           }
         ]
@@ -92,8 +69,8 @@ Example config.json:
 Different types of devices are supported:
 * Lightbulb: The device is a lightbulb in Homekit. The RF communication is bi-directional. Homekit can be used to switch the light on or off. The (power) status of the bulb is updated in Homekit after the remote is pressed.
 * Switch: The device is a power switch in Homekit. The RF communication is bi-directional.
-* StatefulProgrammableSwitch: The device is a read-only on-off type switch in Homekit. The RF communication is receive only, so state can not be changed using Homekit. This way, the RF remote could be used to trigger Homekit scenes, using Homekit automation.
-* StatelessProgrammableSwitch: The device is a read-only 'pushbutton' type switch.
+* StatefulProgrammableSwitch (Deprecated): The device is a read-only on-off type switch in Homekit. The RF communication is receive only, so state can not be changed using Homekit. This way, the RF remote could be used to trigger Homekit scenes, using Homekit automation.
+* StatelessProgrammableSwitch: The device is a read-only 'pushbutton' type switch. Parses `CMD=ON` as `Single Press` event, and `CMD=OFF` as `Double Press` event.
 
 ## Optional parameters
 By adding `dimrange` to a channel, the brightness characteristic will be enabled for this device. The value of `dimrange` should correspond to 100% brightness level.
