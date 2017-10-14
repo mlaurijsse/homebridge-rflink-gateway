@@ -173,7 +173,8 @@ function RFLinkAccessory(log, config, controller) {
   this.informationService
     .setCharacteristic(Characteristic.Manufacturer, "RFLink")
     .setCharacteristic(Characteristic.Model, this.protocol)
-    .setCharacteristic(Characteristic.SoftwareRevision, require('./package.json').version);
+    .setCharacteristic(Characteristic.SoftwareRevision, require('./package.json').version)
+    .setCharacteristic(Characteristic.Version, require('./package.json').version);
 
   this.log("Added RFLink device: %s, protocol: %s, address: %s, channels: %d", this.name, this.protocol, this.address, this.channels.length);
 
