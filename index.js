@@ -125,7 +125,14 @@ function RFLinkAccessory(log, config, controller) {
 
   var i = 0;
   // Add homekit service types
-  this.channels.forEach(function (channel) {
+  this.channels.forEach(function (chn) {
+    var channel;
+    if (chn.hasOwnProperty('channel')) {
+      channel = chn;
+    } else {
+      channel = { channel: chn };
+    }
+
     if (channel.name === undefined) {
       channel.name = this.name + ' ' + channel.channel;
 //      if (channel.type == "StatelessProgrammableSwitch") {
@@ -253,8 +260,10 @@ RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(pack
     debug("%s: Matched channel: %s, command: %s", this.type, packet.channel, packet.command);
     if (packet.command == 'CMD=ON') {
       this.getCharacteristic(Characteristic.ProgrammableSwitchOutputState).setValue(1, false, 'RFLink');
+      this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
     } else if (packet.command == 'CMD=OFF') {
       this.getCharacteristic(Characteristic.ProgrammableSwitchOutputState).setValue(0, false, 'RFLink');
+      this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
     }
   }
 };
