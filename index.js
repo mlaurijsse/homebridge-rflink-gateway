@@ -278,8 +278,10 @@ RFLinkAccessory.prototype.parsePacket.StatelessProgrammableSwitch = function(pac
       }
     } else if (this.channel == "all") {
       if (packet.command == 'CMD=ALLON'){
+        debug("%s: Matched channel: all, command: %s", this.type, packet.command);
         this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
       } else if (packet.command == 'CMD=ALLOFF') {
+        debug("%s: Matched channel: all, command: %s", this.type, packet.command);
         this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.DOUBLE_PRESS, false, 'RFLink');
       }
     }
