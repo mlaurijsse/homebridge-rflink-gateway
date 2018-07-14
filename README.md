@@ -52,6 +52,23 @@ Example config.json:
                 "address": "0202a000",
                 "type": "StatelessProgrammableSwitch"
                 "channels": [ 1, 2, 3, 4, "all"]
+              },
+              {
+                "name": "Oregon sensor",
+                "protocol": "Oregon TempHygro",
+                "address": "CC1D",
+                "channels": [
+                  {
+                    "channel": "TEMP",
+                    "type": "TemperatureSensor",
+                    "name": "Test temperature"
+                  },
+                  {
+                    "channel": "HUM",
+                    "type": "HumiditySensor",
+                    "name": "Test humidity"
+                  }
+                ]
               }
             ],
             "delay": 500,
@@ -67,10 +84,15 @@ Example config.json:
 
 ## Supported types
 Different types of devices are supported:
-* Lightbulb: The device is a lightbulb in Homekit. The RF communication is bi-directional. Homekit can be used to switch the light on or off. The (power) status of the bulb is updated in Homekit after the remote is pressed.
-* Switch: The device is a power switch in Homekit. The RF communication is bi-directional.
-* StatefulProgrammableSwitch (Deprecated): The device is a read-only on-off type switch in Homekit. The RF communication is receive only, so state can not be changed using Homekit. This way, the RF remote could be used to trigger Homekit scenes, using Homekit automation.
+* Lightbulb: The device is a lightbulb in HomeKit. The RF communication is bi-directional. HomeKit can be used to switch the light on or off. The (power) status of the bulb is updated in HomeKit after the remote is pressed.
+* Switch: The device is a power switch in HomeKit. The RF communication is bi-directional.
 * StatelessProgrammableSwitch: The device is a read-only 'pushbutton' type switch. Parses `CMD=ON` as `Single Press` event, and `CMD=OFF` as `Double Press` event.
+* TemperatureSensor: A read-only device that parses the current temperature
+* HumiditySensor:  A read-only device that parses the current relative humidity
+
+### Deprecated types
+
+* StatefulProgrammableSwitch (Deprecated): The device is a read-only on-off type switch in HomeKit. The RF communication is receive only, so state can not be changed using HomeKit. This way, the RF remote could be used to trigger HomeKit scenes, using HomeKit automation.
 
 ## Optional parameters
 By adding `dimrange` to a channel, the brightness characteristic will be enabled for this device. The value of `dimrange` should correspond to 100% brightness level.
