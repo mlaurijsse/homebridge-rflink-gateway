@@ -23,6 +23,15 @@ function RFLinkPlatform(log, config) {
   this.config = config;
 }
 
+function signedToFloat(hex) {
+  var int = parseInt(hex, 16);
+  if ((int & 0x8000) > 0) {
+    return -(int & 0x7FFF) / 10;
+  } else {
+    return int / 10;
+  }
+}
+
 RFLinkPlatform.prototype.accessories = function(callback) {
   var foundDevices = [];
 
@@ -89,18 +98,28 @@ RFLinkPlatform.prototype._addDevices = function(bridgeConfig) {
 
 RFLinkPlatform.prototype._dataHandler = function(data) {
   data = data.split(';');
+
   if (data.length > 5) {
-    data[3] = (data[3]!==undefined)?data[3].split('=').pop():null;
-    //data[3] = data[3].length < 6 ? "0".repeat(6-data[3].length) + data[3] : data[3];
-    data[4] = (data[4]!==undefined)?data[4].split('=').pop():null;
+
+    var packetType = data[0];
+    var packetCounter = data[1];
+    var deviceName = data[2];
+    var dataFields = data.slice(3, data.length - 1);
+
+    dataFields = dataFields.reduce(function(accumulator, value) {
+      var splitData = value.split('=');
+      accumulator[splitData[0]] = splitData[1];
+      return accumulator;
+    }, {});
 
     var packet = {
-      type: data[0],
-      id: data[1],
-      protocol: data[2],
-      address: data[3],
-      channel: data[4],
-      command: data[5]
+      type: packetType,
+      id: packetCounter,
+      protocol: deviceName,
+      address: dataFields.ID,
+      channel: dataFields.SWITCH,
+      command: dataFields.CMD,
+      data: dataFields
     };
 
     this._devices.forEach(function (device) {
@@ -245,9 +264,9 @@ RFLinkAccessory.prototype.parsePacket = function(packet) {
 RFLinkAccessory.prototype.parsePacket.Lightbulb = function (packet) {
   if(packet.channel == this.channel) {
     debug("%s: Matched channel: %s, command: %s", this.type, packet.channel, packet.command);
-    if (packet.command == 'CMD=ON') {
+    if (packet.command == 'ON') {
       this.getCharacteristic(Characteristic.On).setValue(1, false, 'RFLink');
-    } else if (packet.command == 'CMD=OFF') {
+    } else if (packet.command == 'OFF') {
       this.getCharacteristic(Characteristic.On).setValue(0, false, 'RFLink');
     }
   }
@@ -258,10 +277,10 @@ RFLinkAccessory.prototype.parsePacket.Switch = RFLinkAccessory.prototype.parsePa
 RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(packet) {
   if(packet.channel == this.channel) {
     debug("%s: Matched channel: %s, command: %s", this.type, packet.channel, packet.command);
-    if (packet.command == 'CMD=ON') {
+    if (packet.command == 'ON') {
       this.getCharacteristic(Characteristic.ProgrammableSwitchOutputState).setValue(1, false, 'RFLink');
       this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
-    } else if (packet.command == 'CMD=OFF') {
+    } else if (packet.command == 'OFF') {
       this.getCharacteristic(Characteristic.ProgrammableSwitchOutputState).setValue(0, false, 'RFLink');
       this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
     }
@@ -271,18 +290,34 @@ RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(pack
 RFLinkAccessory.prototype.parsePacket.StatelessProgrammableSwitch = function(packet) {
     if(packet.channel == this.channel) {
       debug("%s: Matched channel: %s, command: %s", this.type, packet.channel, packet.command);
-      if (packet.command == 'CMD=ON'){
+      if (packet.command == 'ON'){
         this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
-      } else if (packet.command == 'CMD=OFF') {
+      } else if (packet.command == 'OFF') {
         this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.DOUBLE_PRESS, false, 'RFLink');
       }
     } else if (this.channel == "all") {
-      if (packet.command == 'CMD=ALLON'){
+      if (packet.command == 'ALLON'){
         debug("%s: Matched channel: all, command: %s", this.type, packet.command);
         this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
-      } else if (packet.command == 'CMD=ALLOFF') {
+      } else if (packet.command == 'ALLOFF') {
         debug("%s: Matched channel: all, command: %s", this.type, packet.command);
         this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.DOUBLE_PRESS, false, 'RFLink');
       }
     }
 };
+
+RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
+  if (packet.data && packet.data.TEMP) {
+    debug("%s: Matched sensor: %s, address: %s, data: %o", this.type, packet.protocol, packet.address, packet.data);
+    var temp = signedToFloat(packet.data.TEMP);
+    this.getCharacteristic(Characteristic.CurrentTemperature).setValue(temp);
+  }
+}
+
+RFLinkAccessory.prototype.parsePacket.HumiditySensor = function(packet) {
+  if (packet.data && packet.data.HUM) {
+    debug("%s: Matched sensor: %s, address: %s, data: %o", this.type, packet.protocol, packet.address, packet.data);
+    var humidity = parseInt(packet.data.HUM, 10);
+    this.getCharacteristic(Characteristic.CurrentRelativeHumidity).setValue(humidity);
+  }
+}
