@@ -169,6 +169,7 @@ function RFLinkAccessory(log, config, controller) {
       service.device = this;
       service.lastCommand = '';
       service.parsePacket = this.parsePacket[channel.type];
+      service.setBatteryStatus = this.setBatteryStatus;
 
       // if channel is of writable type
       if (service.type == 'Lightbulb' || service.type == 'Switch') {
@@ -261,6 +262,16 @@ RFLinkAccessory.prototype.parsePacket = function(packet) {
   }
 };
 
+RFLinkAccessory.prototype.setBatteryStatus = function(packet) {
+  if (packet.data && packet.data.BAT) {
+    // A value of 0 indicates battery level is normal; a value of 1 indicates
+    // that battery level is low.
+    var batteryLevel = packet.data.BAT === "LOW" ? 1 : 0;
+    debug("%s: Setting StatusLowBattery to %d", this.type, batteryLevel);
+    this.getCharacteristic(Characteristic.StatusLowBattery).setValue(batteryLevel);
+  }
+};
+
 RFLinkAccessory.prototype.parsePacket.Lightbulb = function (packet) {
   if(packet.channel == this.channel) {
     debug("%s: Matched channel: %s, command: %s", this.type, packet.channel, packet.command);
@@ -312,6 +323,8 @@ RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
     var temp = signedToFloat(packet.data.TEMP);
     this.getCharacteristic(Characteristic.CurrentTemperature).setValue(temp);
   }
+
+  this.setBatteryStatus(packet);
 }
 
 RFLinkAccessory.prototype.parsePacket.HumiditySensor = function(packet) {
@@ -320,4 +333,6 @@ RFLinkAccessory.prototype.parsePacket.HumiditySensor = function(packet) {
     var humidity = parseInt(packet.data.HUM, 10);
     this.getCharacteristic(Characteristic.CurrentRelativeHumidity).setValue(humidity);
   }
+
+  this.setBatteryStatus(packet);
 }
