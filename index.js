@@ -143,6 +143,11 @@ function RFLinkAccessory(log, config, controller) {
   this.services = Array();
 
   var i = 0;
+
+  if (this.channels === undefined) {
+    this.channels = ["none"];
+  }
+
   // Add homekit service types
   this.channels.forEach(function (chn) {
     var channel;
@@ -154,9 +159,6 @@ function RFLinkAccessory(log, config, controller) {
 
     if (channel.name === undefined) {
       channel.name = this.name + ' ' + channel.channel;
-//      if (channel.type == "StatelessProgrammableSwitch") {
-//        channel.name = channel.name + ' ' + channel.command;
-//      }
     }
     if (channel.type === undefined) {
       channel.type = this.type;
@@ -176,18 +178,12 @@ function RFLinkAccessory(log, config, controller) {
         service.getCharacteristic(Characteristic.On).on('set', this.setOn.bind(service));
       }
 
-      // Set command if StatelessProgrammableSwitch
-//      if(service.type == 'StatelessProgrammableSwitch') {
-//        service.command = channel.command;
-//      }
-
       // Add brightness Characteristic if dimrange option is set
       if (channel.dimrange) {
         service.addCharacteristic(new Characteristic.Brightness())
           .on('set', this.setBrightness.bind(service));
         service.dimrange = channel.dimrange;
       }
-
 
       // add to services stack
       this.services.push(service);
@@ -199,9 +195,9 @@ function RFLinkAccessory(log, config, controller) {
   this.informationService = new Service.AccessoryInformation();
   this.informationService
     .setCharacteristic(Characteristic.Manufacturer, "RFLink")
-    .setCharacteristic(Characteristic.Model, this.protocol)
-    .setCharacteristic(Characteristic.SoftwareRevision, require('./package.json').version)
-    .setCharacteristic(Characteristic.Version, require('./package.json').version);
+    .setCharacteristic(Characteristic.Model, this.protocol);
+//    .setCharacteristic(Characteristic.SoftwareRevision, require('./package.json').version)
+//    .setCharacteristic(Characteristic.Version, require('./package.json').version);
 
   this.log("Added RFLink device: %s, protocol: %s, address: %s, channels: %d", this.name, this.protocol, this.address, this.channels.length);
 
@@ -213,11 +209,19 @@ RFLinkAccessory.prototype.getServices = function() {
 
 
 RFLinkAccessory.prototype.setOn = function(on, callback, context) {
+  var cmd;
   if (context !== 'RFLink') {
-    var cmd = '10;' +
-        this.device.protocol + ';' +
-        this.device.address + ';' +
-        this.channel + (on?";ON;\n":";OFF;\n");
+    if (this.device.protocol == "KNX") {
+      cmd = '10;' +
+          this.device.protocol + ';' +
+          this.device.address +
+          (on?";ON;\n":";OFF;\n");
+    } else {
+      cmd = '10;' +
+          this.device.protocol + ';' +
+          this.device.address + ';' +
+          this.channel + (on?";ON;\n":";OFF;\n");
+    }
 
     if (cmd != this.lastCommand) {
       this.device.controller.sendCommands(cmd);
@@ -273,8 +277,8 @@ RFLinkAccessory.prototype.setBatteryStatus = function(packet) {
 };
 
 RFLinkAccessory.prototype.parsePacket.Lightbulb = function (packet) {
-  if(packet.channel == this.channel) {
-    debug("%s: Matched channel: %s, command: %s", this.type, packet.channel, packet.command);
+  if((this.channel == "none") || (packet.channel == this.channel)) {
+    debug("%s: Matched address: %s, channel: %s, command: %s", this.type, packet.address, packet.channel, packet.command);
     if (packet.command == 'ON') {
       this.getCharacteristic(Characteristic.On).setValue(1, false, 'RFLink');
     } else if (packet.command == 'OFF') {
@@ -286,8 +290,8 @@ RFLinkAccessory.prototype.parsePacket.Lightbulb = function (packet) {
 RFLinkAccessory.prototype.parsePacket.Switch = RFLinkAccessory.prototype.parsePacket.Lightbulb;
 
 RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(packet) {
-  if(packet.channel == this.channel) {
-    debug("%s: Matched channel: %s, command: %s", this.type, packet.channel, packet.command);
+  if((this.channel == "none") || (packet.channel == this.channel)) {
+    debug("%s: Matched address: %s, channel: %s, command: %s", this.type, packet.address, packet.channel, packet.command);
     if (packet.command == 'ON') {
       this.getCharacteristic(Characteristic.ProgrammableSwitchOutputState).setValue(1, false, 'RFLink');
       this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
@@ -299,8 +303,8 @@ RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(pack
 };
 
 RFLinkAccessory.prototype.parsePacket.StatelessProgrammableSwitch = function(packet) {
-    if(packet.channel == this.channel) {
-      debug("%s: Matched channel: %s, command: %s", this.type, packet.channel, packet.command);
+  if((this.channel == "none") || (packet.channel == this.channel)) {
+    debug("%s: Matched address: %s, channel: %s, command: %s", this.type, packet.address, packet.channel, packet.command);
       if (packet.command == 'ON'){
         this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
       } else if (packet.command == 'OFF') {
@@ -325,7 +329,7 @@ RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
   }
 
   this.setBatteryStatus(packet);
-}
+};
 
 RFLinkAccessory.prototype.parsePacket.HumiditySensor = function(packet) {
   if (packet.data && packet.data.HUM) {
@@ -335,4 +339,4 @@ RFLinkAccessory.prototype.parsePacket.HumiditySensor = function(packet) {
   }
 
   this.setBatteryStatus(packet);
-}
+};
