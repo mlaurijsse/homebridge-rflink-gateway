@@ -140,6 +140,7 @@ function RFLinkAccessory(log, config, controller) {
   this.protocol = config.protocol;
   this.address = config.address;
   this.channels = config.channels;
+  this.dimrange = config.dimrange;
   this.services = Array();
 
   var i = 0;
@@ -163,6 +164,10 @@ function RFLinkAccessory(log, config, controller) {
     if (channel.type === undefined) {
       channel.type = this.type;
     }
+    if (channel.dimrange === undefined) {
+      channel.dimrange = this.dimrange;
+    }
+
 
       service = new Service[channel.type](channel.name, i);
       service.channel = channel.channel;
