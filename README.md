@@ -4,7 +4,7 @@ This is a plugin for [RFLink](http://www.nemcon.nl/blog2/) integration in [Homeb
 ## Install
 To install globally:
 ```
-sudo npm install -g https://github.com/mlaurijsse/homebridge-rflink
+sudo npm install -g https://github.com/mlaurijsse/homebridge-rflink-gateway
 ```
 
 ## Config
