@@ -214,13 +214,24 @@ RFLinkAccessory.prototype.getServices = function() {
 
 
 RFLinkAccessory.prototype.setOn = function(on, callback, context) {
-  var cmd;
+  var cmd, brightness;
+
   if (context !== 'RFLink') {
     if (this.device.protocol == "KNX") {
       cmd = '10;' +
           this.device.protocol + ';' +
           this.device.address +
           (on?";ON;\n":";OFF;\n");
+
+    // if uses a dimrange, turn device on by setting brightness
+  } else if (on && this.dimrange && ((brightness = this.getCharacteristic(Characteristic.Brightness).value) > 0)) {
+      brightness = Math.round(brightness * this.dimrange / 100);
+      cmd = '10;' +
+          this.device.protocol + ';' +
+          this.device.address + ';' +
+          this.channel + ';' +
+          brightness + ';\n';
+
     } else {
       cmd = '10;' +
           this.device.protocol + ';' +
@@ -231,7 +242,7 @@ RFLinkAccessory.prototype.setOn = function(on, callback, context) {
     if (cmd != this.lastCommand) {
       this.device.controller.sendCommands(cmd);
       this.lastCommand = cmd;
-      //    this.device.log("Channel: %s, switched: %d, by command: %s", this.channel, on, cmd);
+      debug("Channel: %s, switched: %d, by command: %s", this.channel, on, cmd);
     }
 
   }
@@ -241,7 +252,7 @@ RFLinkAccessory.prototype.setOn = function(on, callback, context) {
 
 RFLinkAccessory.prototype.setBrightness = function(brightness, callback, context) {
   if (context !== 'RFLink') {
-    brightnessScaled = Math.round(brightness * this.dimrange / 100);
+    var brightnessScaled = Math.round(brightness * this.dimrange / 100);
     var cmd = '10;' +
         this.device.protocol + ';' +
         this.device.address + ';' +

@@ -1,6 +1,6 @@
 {
   "name": "homebridge-rflink-gateway",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "This directly bridges RFLink to homebridge https://github.com/nfarina/homebridge",
   "license": "ISC",
   "author": {
@@ -22,7 +22,7 @@
     "homebridge": ">=0.4.0"
   },
   "dependencies": {
-    "serialport": "^8.0.6",
+    "serialport": "^9.0.3",
     "bluebird": "^3.3.4"
   }
 }
