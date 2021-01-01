@@ -1,6 +1,12 @@
 # RFLink Platform
 This is a plugin for [RFLink](http://www.nemcon.nl/blog2/) integration in [Homebridge](https://github.com/nfarina/homebridge).
 
+Support for serially and mqtt connected RFLink devices.
+
+## MQTT RFLink Devices
+
+Inital support for mqtt connected RFLINK devices based on https://github.com/couin3/RFLink.  At the present time only read only sensor devices are supported.  Tested and validated devices include Temperature and Humidity Sensors.
+
 ## Install
 To install globally:
 ```
@@ -100,3 +106,11 @@ By adding `dimrange` to a channel, the brightness characteristic will be enabled
 `delay` sets the delay used between commands to avoid flooding RFLink.
 
 `repeat` sets the number of time a command is resent to RFLink. In some setups (e.g. NewKaku dimmers), this might yield undesired results.
+
+`mqttHost` - name or ip address of your mqtt host.  Required to enable mqtt device mode.
+
+`mqttTopic` - Optional topic for mqtt messages from your rflink device, defaults to `RFLink/msg`
+
+## Credits
+
+* NortherMan54 - Support for mqtt based RFLink devices, ie https://github.com/couin3/RFLink

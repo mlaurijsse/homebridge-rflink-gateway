@@ -1,5 +1,4 @@
 var inherits = require('util').inherits;
-var SerialPort = require("serialport");
 var RFLink = require('./rflink');
 var Service, Characteristic;
 var debug = process.env.hasOwnProperty('RFLINK_DEBUG') ? consoleDebug : function () {};
@@ -79,7 +78,9 @@ RFLinkPlatform.prototype._addDevices = function(bridgeConfig) {
     device: bridgeConfig.serialport || false,
     baudrate: bridgeConfig.baudrate || false,
     delayBetweenCommands: bridgeConfig.delay || false,
-    commandRepeat: bridgeConfig.repeat || false
+    commandRepeat: bridgeConfig.repeat || false,
+    mqttHost: bridgeConfig.mqttHost || false,
+    mqttTopic: bridgeConfig.mqttTopic || false
   },
   this._dataHandler.bind(this));
 
@@ -316,7 +317,7 @@ RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(pack
       this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
     }
   }
-};
+}; 
 
 RFLinkAccessory.prototype.parsePacket.StatelessProgrammableSwitch = function(packet) {
   if((this.channel == "none") || (packet.channel == this.channel)) {
@@ -339,8 +340,9 @@ RFLinkAccessory.prototype.parsePacket.StatelessProgrammableSwitch = function(pac
 
 RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
   if (packet.data && packet.data.TEMP) {
-    debug("%s: Matched sensor: %s, address: %s, data: %o", this.type, packet.protocol, packet.address, packet.data);
+    debug("%s: Matched sensor: %s, address: %s, data: %o", this.name, packet.protocol, packet.address, packet.data);
     var temp = signedToFloat(packet.data.TEMP);
+    debug("%s: Setting temperature to %s", this.name, temp);
     this.getCharacteristic(Characteristic.CurrentTemperature).setValue(temp);
   }
 
@@ -349,8 +351,9 @@ RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
 
 RFLinkAccessory.prototype.parsePacket.HumiditySensor = function(packet) {
   if (packet.data && packet.data.HUM) {
-    debug("%s: Matched sensor: %s, address: %s, data: %o", this.type, packet.protocol, packet.address, packet.data);
+    debug("%s: Matched sensor: %s, address: %s, data: %o", this.name, packet.protocol, packet.address, packet.data);
     var humidity = parseInt(packet.data.HUM, 10);
+    debug("%s: Setting humidity to %s", this.name, humidity);
     this.getCharacteristic(Characteristic.CurrentRelativeHumidity).setValue(humidity);
   }
 

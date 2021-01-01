@@ -21,8 +21,26 @@
     "node": ">=8.0.0",
     "homebridge": ">=0.4.0"
   },
+  "devDependencies": {
+    "nodemon": "^2.0.4"
+  },
+  "scripts": {
+    "watch": "nodemon"
+  },
   "dependencies": {
-    "serialport": "^9.0.3",
-    "bluebird": "^3.3.4"
+    "@serialport/parser-readline": "^9.0.1",
+    "bluebird": "^3.3.4",
+    "mqtt": "4.2.x",
+    "serialport": "^9.0.3"
+  },
+  "nodemonConfig": {
+    "watch": [],
+    "ext": "js",
+    "ignore": [],
+    "exec": "RFLINK_DEBUG=true ~/npm/bin/homebridge -D -R -P ~/Code",
+    "signal": "SIGTERM",
+    "env": {
+      "NODE_OPTIONS": "--trace-warnings"
+    }
   }
 }
