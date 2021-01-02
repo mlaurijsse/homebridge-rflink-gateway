@@ -179,6 +179,16 @@ function RFLinkAccessory(log, config, controller) {
       service.parsePacket = this.parsePacket[channel.type];
       service.setBatteryStatus = this.setBatteryStatus;
 
+      // Burr winter is here
+      if (service.type == 'TemperatureSensor') {
+        // Burr winter is here
+        service.getCharacteristic(Characteristic.CurrentTemperature)
+          .setProps({
+            minValue: -100,
+            maxValue: 100,
+        });
+      }
+
       // if channel is of writable type
       if (service.type == 'Lightbulb' || service.type == 'Switch') {
         service.getCharacteristic(Characteristic.On).on('set', this.setOn.bind(service));
@@ -201,8 +211,8 @@ function RFLinkAccessory(log, config, controller) {
   this.informationService = new Service.AccessoryInformation();
   this.informationService
     .setCharacteristic(Characteristic.Manufacturer, "RFLink")
-    .setCharacteristic(Characteristic.Model, this.protocol);
-//    .setCharacteristic(Characteristic.SoftwareRevision, require('./package.json').version)
+    .setCharacteristic(Characteristic.Model, this.protocol)
+    .setCharacteristic(Characteristic.FirmwareRevision, require('./package.json').version);
 //    .setCharacteristic(Characteristic.Version, require('./package.json').version);
 
   this.log("Added RFLink device: %s, protocol: %s, address: %s, channels: %d", this.name, this.protocol, this.address, this.channels.length);
