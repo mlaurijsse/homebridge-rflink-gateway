@@ -29,6 +29,7 @@ Example config.json:
                 "name": "ELRO",
                 "protocol": "AB400D",
                 "address": "4a",
+                "watchdog": 5,
                 "channels": [
                   {
                     "channel": 1,
@@ -107,9 +108,11 @@ By adding `dimrange` to a channel, the brightness characteristic will be enabled
 
 `repeat` sets the number of time a command is resent to RFLink. In some setups (e.g. NewKaku dimmers), this might yield undesired results.
 
-`mqttHost` - name or ip address of your mqtt host.  Required to enable mqtt device mode.
+`watchdog` Watchdog timer in minutes for devices not responding.  If a device is not heard from it will be marked as 'Unavailable' in the home app. Defaults to 60 minutes.
 
-`mqttTopic` - Optional topic for mqtt messages from your rflink device, defaults to `RFLink/msg`
+`mqttHost` name or ip address of your mqtt host.  Required to enable mqtt device mode.
+
+`mqttTopic` Optional topic for mqtt messages from your rflink device, defaults to `RFLink/msg`
 
 ## Credits
 

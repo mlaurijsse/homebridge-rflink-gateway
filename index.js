@@ -123,9 +123,14 @@ RFLinkPlatform.prototype._dataHandler = function(data) {
       data: dataFields
     };
 
+    var found = false;
     this._devices.forEach(function (device) {
-      device.parsePacket(packet);
+      if (device.parsePacket(packet))
+        found = true;
     });
+    if (!found) {
+      this.log.warn('WARNING: Message from an unknown device protocol: \'%s\',  address: \'%s\'.', packet.protocol, packet.address );
+    }
   }
 };
 
@@ -178,10 +183,14 @@ function RFLinkAccessory(log, config, controller) {
       service.lastCommand = '';
       service.parsePacket = this.parsePacket[channel.type];
       service.setBatteryStatus = this.setBatteryStatus;
+      service.serviceWatchdog = this.serviceWatchdog;
+      service.notResponding = this.notResponding;
+      service.watchdog = config.watchdog || 60;
+      service.timeout = this.serviceWatchdog.call(service);
+      service.log = this.log;
 
       // Burr winter is here
       if (service.type == 'TemperatureSensor') {
-        // Burr winter is here
         service.getCharacteristic(Characteristic.CurrentTemperature)
           .setProps({
             minValue: -100,
@@ -206,7 +215,7 @@ function RFLinkAccessory(log, config, controller) {
       i++;
   }.bind(this));
 
-
+  
   // Set device information
   this.informationService = new Service.AccessoryInformation();
   this.informationService
@@ -290,6 +299,7 @@ RFLinkAccessory.prototype.parsePacket = function(packet) {
     this.services.forEach(function (service) {
       service.parsePacket(packet);
     });
+    return true;
   }
 };
 
@@ -305,6 +315,7 @@ RFLinkAccessory.prototype.setBatteryStatus = function(packet) {
 
 RFLinkAccessory.prototype.parsePacket.Lightbulb = function (packet) {
   if((this.channel == "none") || (packet.channel == this.channel)) {
+    this.timeout = this.serviceWatchdog();
     debug("%s: Matched address: %s, channel: %s, command: %s", this.type, packet.address, packet.channel, packet.command);
     if (packet.command == 'ON') {
       this.getCharacteristic(Characteristic.On).setValue(1, false, 'RFLink');
@@ -318,6 +329,7 @@ RFLinkAccessory.prototype.parsePacket.Switch = RFLinkAccessory.prototype.parsePa
 
 RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(packet) {
   if((this.channel == "none") || (packet.channel == this.channel)) {
+    this.timeout = this.serviceWatchdog();
     debug("%s: Matched address: %s, channel: %s, command: %s", this.type, packet.address, packet.channel, packet.command);
     if (packet.command == 'ON') {
       this.getCharacteristic(Characteristic.ProgrammableSwitchOutputState).setValue(1, false, 'RFLink');
@@ -331,6 +343,7 @@ RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(pack
 
 RFLinkAccessory.prototype.parsePacket.StatelessProgrammableSwitch = function(packet) {
   if((this.channel == "none") || (packet.channel == this.channel)) {
+    this.timeout = this.serviceWatchdog();
     debug("%s: Matched address: %s, channel: %s, command: %s", this.type, packet.address, packet.channel, packet.command);
       if (packet.command == 'ON'){
         this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
@@ -350,6 +363,8 @@ RFLinkAccessory.prototype.parsePacket.StatelessProgrammableSwitch = function(pac
 
 RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
   if (packet.data && packet.data.TEMP) {
+    // debug('This', this);
+    this.timeout = this.serviceWatchdog();
     debug("%s: Matched sensor: %s, address: %s, data: %o", this.name, packet.protocol, packet.address, packet.data);
     var temp = signedToFloat(packet.data.TEMP);
     debug("%s: Setting temperature to %s", this.name, temp);
@@ -361,6 +376,7 @@ RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
 
 RFLinkAccessory.prototype.parsePacket.HumiditySensor = function(packet) {
   if (packet.data && packet.data.HUM) {
+    this.timeout = this.serviceWatchdog();
     debug("%s: Matched sensor: %s, address: %s, data: %o", this.name, packet.protocol, packet.address, packet.data);
     var humidity = parseInt(packet.data.HUM, 10);
     debug("%s: Setting humidity to %s", this.name, humidity);
@@ -369,3 +385,41 @@ RFLinkAccessory.prototype.parsePacket.HumiditySensor = function(packet) {
 
   this.setBatteryStatus(packet);
 };
+
+RFLinkAccessory.prototype.serviceWatchdog = function() {
+
+  if (this.timeout) {
+    clearTimeout(this.timeout);
+    // debug('Resetting serviceWatchdog:', this.displayName, this.watchdog);
+  } else  {
+    debug('Setting serviceWatchdog:', this.displayName, this.watchdog);
+  }
+
+  this.timeout = setTimeout(this.notResponding.bind(this), this.watchdog * 60 * 1000);
+  return (this.timeout);
+}
+
+RFLinkAccessory.prototype.notResponding = function() {
+  this.log.error('ERROR: Device %s %s is not responding:', this.displayName, this.type);
+
+  // Updating the primary characteristic to an error type will mark it as 'Not Responding' in the home app.  
+  // To clear the 'Not responding' the characteristic needs to be updated with a valid value.
+
+  switch (this.type) {
+    case 'TemperatureSensor':
+      this.getCharacteristic(Characteristic.CurrentTemperature).updateValue(new Error('Device not responding.'));
+      break;
+    case 'HumiditySensor':
+      this.getCharacteristic(Characteristic.CurrentRelativeHumidity).updateValue(new Error('Device not responding.'));
+      break;
+    case 'Lightbulb':
+    case 'Switch':
+      this.getCharacteristic(Characteristic.On).updateValue(new Error('Device not responding.'));
+      break;
+    case 'StatelessProgrammableSwitch':
+      this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).updateValue(new Error('Device not responding.'));
+      break;
+    default:
+      debug('ERROR: %s is not responding and type %s is not known', this.displayName, this.type);
+  }
+}
