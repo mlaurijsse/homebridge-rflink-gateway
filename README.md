@@ -113,4 +113,5 @@ By adding `dimrange` to a channel, the brightness characteristic will be enabled
 
 ## Credits
 
+* matiaskorhonen - Added initial support for sensors
 * NortherMan54 - Support for mqtt based RFLink devices, ie https://github.com/couin3/RFLink
