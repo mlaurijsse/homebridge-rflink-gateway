@@ -1,17 +1,21 @@
 var inherits = require('util').inherits;
 var RFLink = require('./rflink');
 var Service, Characteristic;
-var debug = process.env.hasOwnProperty('RFLINK_DEBUG') ? consoleDebug : function () {};
+var debug = process.env.hasOwnProperty('RFLINK_DEBUG') ? consoleDebug : function() {};
 
 function consoleDebug() {
-      console.log.apply(this, arguments);
+  console.log.apply(this, arguments);
 }
 
+var CustomCharacteristic;
+var FakeGatoHistoryService;
 
 module.exports = function(homebridge) {
   Service = homebridge.hap.Service;
   Characteristic = homebridge.hap.Characteristic;
-  homebridge.registerPlatform("homebridge-rflink", "RFLink", RFLinkPlatform);
+  CustomCharacteristic = require('./lib/CustomCharacteristic.js')(homebridge);
+  FakeGatoHistoryService = require('fakegato-history')(homebridge);
+  homebridge.registerPlatform("homebridge-rflink-gateway", "RFLink", RFLinkPlatform);
 };
 
 //
@@ -43,7 +47,7 @@ RFLinkPlatform.prototype.accessories = function(callback) {
       return;
     } else {
       for (var i = 0; i < bridgesLength; i++) {
-        if ( !! this.config.bridges[i]) {
+        if (!!this.config.bridges[i]) {
           returnedDevices = this._addDevices(this.config.bridges[i]);
           foundDevices.push.apply(foundDevices, returnedDevices);
           returnedDevices = null;
@@ -75,18 +79,18 @@ RFLinkPlatform.prototype._addDevices = function(bridgeConfig) {
   // Initialize a new controller to be used for all zones defined for this bridge
   // We interface the bridge directly via serial port
   bridgeController = new RFLink({
-    device: bridgeConfig.serialport || false,
-    baudrate: bridgeConfig.baudrate || false,
-    delayBetweenCommands: bridgeConfig.delay || false,
-    commandRepeat: bridgeConfig.repeat || false,
-    mqttHost: bridgeConfig.mqttHost || false,
-    mqttTopic: bridgeConfig.mqttTopic || false
-  },
-  this._dataHandler.bind(this));
+      device: bridgeConfig.serialport || false,
+      baudrate: bridgeConfig.baudrate || false,
+      delayBetweenCommands: bridgeConfig.delay || false,
+      commandRepeat: bridgeConfig.repeat || false,
+      mqttHost: bridgeConfig.mqttHost || false,
+      mqttTopic: bridgeConfig.mqttTopic || false
+    },
+    this._dataHandler.bind(this));
 
   // Create accessories for all of the defined devices
   for (var i = 0; i < devicesLength; i++) {
-    if ( !! bridgeConfig.devices[i]) {
+    if (!!bridgeConfig.devices[i]) {
       dev = new RFLinkAccessory(this.log, bridgeConfig.devices[i], bridgeController);
       if (dev) {
         devices.push(dev);
@@ -124,12 +128,12 @@ RFLinkPlatform.prototype._dataHandler = function(data) {
     };
 
     var found = false;
-    this._devices.forEach(function (device) {
+    this._devices.forEach(function(device) {
       if (device.parsePacket(packet))
         found = true;
     });
     if (!found) {
-      this.log.warn('WARNING: Message from an unknown device protocol: \'%s\',  address: \'%s\'.', packet.protocol, packet.address );
+      this.log.warn('WARNING: Message from an unknown device protocol: \'%s\',  address: \'%s\'.', packet.protocol, packet.address);
     }
   }
 };
@@ -156,12 +160,14 @@ function RFLinkAccessory(log, config, controller) {
   }
 
   // Add homekit service types
-  this.channels.forEach(function (chn) {
+  this.channels.forEach(function(chn) {
     var channel;
     if (chn.hasOwnProperty('channel')) {
       channel = chn;
     } else {
-      channel = { channel: chn };
+      channel = {
+        channel: chn
+      };
     }
 
     if (channel.name === undefined) {
@@ -174,55 +180,86 @@ function RFLinkAccessory(log, config, controller) {
       channel.dimrange = this.dimrange;
     }
 
+    var service = new Service[channel.type](channel.name, i);
+    service.channel = channel.channel;
+    service.type = channel.type;
+    service.name = channel.name;
+    service.device = this;
+    service.lastCommand = '';
+    service.parsePacket = this.parsePacket[channel.type];
+    service.setBatteryStatus = this.setBatteryStatus;
+    service.serviceWatchdog = this.serviceWatchdog;
+    service.notResponding = this.notResponding;
+    service.watchdog = config.watchdog || 60;
+    service.timeout = this.serviceWatchdog.call(service);
+    service.log = this.log;
 
-      service = new Service[channel.type](channel.name, i);
-      service.channel = channel.channel;
-      service.type = channel.type;
-      service.name = channel.name;
-      service.device = this;
-      service.lastCommand = '';
-      service.parsePacket = this.parsePacket[channel.type];
-      service.setBatteryStatus = this.setBatteryStatus;
-      service.serviceWatchdog = this.serviceWatchdog;
-      service.notResponding = this.notResponding;
-      service.watchdog = config.watchdog || 60;
-      service.timeout = this.serviceWatchdog.call(service);
-      service.log = this.log;
-
-      // Burr winter is here
-      if (service.type == 'TemperatureSensor') {
-        service.getCharacteristic(Characteristic.CurrentTemperature)
-          .setProps({
-            minValue: -100,
-            maxValue: 100,
+    // Burr winter is here
+    if (service.type === 'TemperatureSensor') {
+      service.getCharacteristic(Characteristic.CurrentTemperature)
+        .setProps({
+          minValue: -100,
+          maxValue: 100
         });
+
+      if (channel.history) {
+        service.loggingService = new FakeGatoHistoryService("weather", service, {
+          storage: 'fs',
+          minutes: (channel.historyInterval ? channel.historyInterval : 10) // Update history every 10 minutes
+        });
+        this.services.push(service.loggingService);
       }
 
-      // if channel is of writable type
-      if (service.type == 'Lightbulb' || service.type == 'Switch') {
-        service.getCharacteristic(Characteristic.On).on('set', this.setOn.bind(service));
+      if (channel.alarmOver || channel.alarmOver === 0) { // Cludge for 0 being false
+        service.alarmOver = channel.alarmOver;
+        service.alarmOverService = new Service.ContactSensor(channel.name + 'Alarm Over', 'over');
+        this.services.push(service.alarmOverService);
+        this.log("Added alarm over: %s, protocol: %s, address: %s, channels: %d", this.name, this.protocol, this.address, this.channels.length, service.alarmOver);
       }
-
-      // Add brightness Characteristic if dimrange option is set
-      if (channel.dimrange) {
-        service.addCharacteristic(new Characteristic.Brightness())
-          .on('set', this.setBrightness.bind(service));
-        service.dimrange = channel.dimrange;
+      if (channel.alarmUnder || channel.alarmUnder === 0) {
+        service.alarmUnder = channel.alarmUnder;
+        service.alarmUnderService = new Service.ContactSensor(channel.name + 'Alarm Under', 'under');
+        this.services.push(service.alarmUnderService);
+        this.log("Added alarm under: %s, protocol: %s, address: %s, channels: %d", this.name, this.protocol, this.address, this.channels.length, service.alarmUnder);
       }
+    }
 
-      // add to services stack
-      this.services.push(service);
-      i++;
+    // if channel is of writable type
+    if (service.type === 'Lightbulb' || service.type === 'Switch') {
+      service.getCharacteristic(Characteristic.On).on('set', this.setOn.bind(service));
+    }
+
+    // Add brightness Characteristic if dimrange option is set
+    if (channel.dimrange) {
+      service.addCharacteristic(new Characteristic.Brightness())
+        .on('set', this.setBrightness.bind(service));
+      service.dimrange = channel.dimrange;
+    }
+
+    // if channel is of writable type
+    if (service.type === 'MotionSensor') {
+      if (channel.history) {
+        service.loggingService = new FakeGatoHistoryService("motion", service, {
+          storage: 'fs',
+          minutes: (channel.historyInterval ? channel.historyInterval : 10) // Update history every 10 minutes
+        });
+        this.services.push(service.loggingService);
+        service.addCharacteristic(CustomCharacteristic.LastActivation);
+      }
+    }
+
+    // add to services stack
+    this.services.push(service);
+    i++;
   }.bind(this));
 
-  
   // Set device information
   this.informationService = new Service.AccessoryInformation();
   this.informationService
     .setCharacteristic(Characteristic.Manufacturer, "RFLink")
     .setCharacteristic(Characteristic.Model, this.protocol)
     .setCharacteristic(Characteristic.FirmwareRevision, require('./package.json').version);
-//    .setCharacteristic(Characteristic.Version, require('./package.json').version);
+  //    .setCharacteristic(Characteristic.Version, require('./package.json').version);
 
   this.log("Added RFLink device: %s, protocol: %s, address: %s, channels: %d", this.name, this.protocol, this.address, this.channels.length);
 
@@ -239,24 +276,24 @@ RFLinkAccessory.prototype.setOn = function(on, callback, context) {
   if (context !== 'RFLink') {
     if (this.device.protocol == "KNX") {
       cmd = '10;' +
-          this.device.protocol + ';' +
-          this.device.address +
-          (on?";ON;\n":";OFF;\n");
+        this.device.protocol + ';' +
+        this.device.address +
+        (on ? ";ON;\n" : ";OFF;\n");
 
-    // if uses a dimrange, turn device on by setting brightness
-  } else if (on && this.dimrange && ((brightness = this.getCharacteristic(Characteristic.Brightness).value) > 0)) {
+      // if uses a dimrange, turn device on by setting brightness
+    } else if (on && this.dimrange && ((brightness = this.getCharacteristic(Characteristic.Brightness).value) > 0)) {
       brightness = Math.round(brightness * this.dimrange / 100);
       cmd = '10;' +
-          this.device.protocol + ';' +
-          this.device.address + ';' +
-          this.channel + ';' +
-          brightness + ';\n';
+        this.device.protocol + ';' +
+        this.device.address + ';' +
+        this.channel + ';' +
+        brightness + ';\n';
 
     } else {
       cmd = '10;' +
-          this.device.protocol + ';' +
-          this.device.address + ';' +
-          this.channel + (on?";ON;\n":";OFF;\n");
+        this.device.protocol + ';' +
+        this.device.address + ';' +
+        this.channel + (on ? ";ON;\n" : ";OFF;\n");
     }
 
     if (cmd != this.lastCommand) {
@@ -274,14 +311,14 @@ RFLinkAccessory.prototype.setBrightness = function(brightness, callback, context
   if (context !== 'RFLink') {
     var brightnessScaled = Math.round(brightness * this.dimrange / 100);
     var cmd = '10;' +
-        this.device.protocol + ';' +
-        this.device.address + ';' +
-        this.channel + ';' +
-        brightnessScaled + ';\n';
+      this.device.protocol + ';' +
+      this.device.address + ';' +
+      this.channel + ';' +
+      brightnessScaled + ';\n';
 
     if (cmd != this.lastCommand) {
-        this.device.controller.sendCommands(cmd);
-        this.lastCommand = cmd;
+      this.device.controller.sendCommands(cmd);
+      this.lastCommand = cmd;
     }
 
     if (brightness === 0) {
@@ -296,8 +333,9 @@ RFLinkAccessory.prototype.setBrightness = function(brightness, callback, context
 
 RFLinkAccessory.prototype.parsePacket = function(packet) {
   if (packet.protocol == this.protocol && packet.address == this.address) {
-    this.services.forEach(function (service) {
-      service.parsePacket(packet);
+    this.services.forEach(function(service) {
+      if (service.parsePacket)
+        service.parsePacket(packet);
     });
     return true;
   }
@@ -313,8 +351,8 @@ RFLinkAccessory.prototype.setBatteryStatus = function(packet) {
   }
 };
 
-RFLinkAccessory.prototype.parsePacket.Lightbulb = function (packet) {
-  if((this.channel == "none") || (packet.channel == this.channel)) {
+RFLinkAccessory.prototype.parsePacket.Lightbulb = function(packet) {
+  if ((this.channel == "none") || (packet.channel == this.channel)) {
     this.timeout = this.serviceWatchdog();
     debug("%s: Matched address: %s, channel: %s, command: %s", this.type, packet.address, packet.channel, packet.command);
     if (packet.command == 'ON') {
@@ -328,7 +366,7 @@ RFLinkAccessory.prototype.parsePacket.Lightbulb = function (packet) {
 RFLinkAccessory.prototype.parsePacket.Switch = RFLinkAccessory.prototype.parsePacket.Lightbulb;
 
 RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(packet) {
-  if((this.channel == "none") || (packet.channel == this.channel)) {
+  if ((this.channel == "none") || (packet.channel == this.channel)) {
     this.timeout = this.serviceWatchdog();
     debug("%s: Matched address: %s, channel: %s, command: %s", this.type, packet.address, packet.channel, packet.command);
     if (packet.command == 'ON') {
@@ -339,26 +377,66 @@ RFLinkAccessory.prototype.parsePacket.StatefulProgrammableSwitch = function(pack
       this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
     }
   }
-}; 
+};
 
 RFLinkAccessory.prototype.parsePacket.StatelessProgrammableSwitch = function(packet) {
-  if((this.channel == "none") || (packet.channel == this.channel)) {
+  if ((this.channel == "none") || (packet.channel == this.channel)) {
     this.timeout = this.serviceWatchdog();
     debug("%s: Matched address: %s, channel: %s, command: %s", this.type, packet.address, packet.channel, packet.command);
-      if (packet.command == 'ON'){
-        this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
-      } else if (packet.command == 'OFF') {
-        this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.DOUBLE_PRESS, false, 'RFLink');
+    if (packet.command == 'ON') {
+      this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
+    } else if (packet.command == 'OFF') {
+      this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.DOUBLE_PRESS, false, 'RFLink');
+    }
+  } else if (this.channel == "all") {
+    if (packet.command == 'ALLON') {
+      debug("%s: Matched channel: all, command: %s", this.type, packet.command);
+      this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
+    } else if (packet.command == 'ALLOFF') {
+      debug("%s: Matched channel: all, command: %s", this.type, packet.command);
+      this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.DOUBLE_PRESS, false, 'RFLink');
+    }
+  }
+};
+
+// 20;40;Skylink;ID=3c7d;SWITCH=01;CMD=ON;
+
+RFLinkAccessory.prototype.parsePacket.MotionSensor = function(packet) {
+  if ((this.channel === "none") || (packet.channel === this.channel)) {
+    this.timeout = this.serviceWatchdog();
+    debug("%s: Matched address: %s, channel: %s, command: %s", this.type, packet.address, packet.channel, packet.command);
+    if (packet.command === 'ON') {
+      this.getCharacteristic(Characteristic.MotionDetected).setValue(true, false, 'RFLink');
+
+      // Reset motion sensor after 30 seconds from last activation
+
+      if (this.motionTimeout) {
+        clearTimeout(this.motionTimeout);
       }
-    } else if (this.channel == "all") {
-      if (packet.command == 'ALLON'){
-        debug("%s: Matched channel: all, command: %s", this.type, packet.command);
-        this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS, false, 'RFLink');
-      } else if (packet.command == 'ALLOFF') {
-        debug("%s: Matched channel: all, command: %s", this.type, packet.command);
-        this.getCharacteristic(Characteristic.ProgrammableSwitchEvent).setValue(Characteristic.ProgrammableSwitchEvent.DOUBLE_PRESS, false, 'RFLink');
+      this.motionTimeout = setTimeout(function() {
+        this.getCharacteristic(Characteristic.MotionDetected).setValue(false, false, 'RFLink');
+        this.loggingService.addEntry({
+          time: Math.round(new Date().valueOf() / 1000),
+          status: this.getCharacteristic(Characteristic.MotionDetected).value
+        });
+      }.bind(this), 0.5 * 60 * 1000);
+    } else if (packet.command === 'OFF') {
+      this.getCharacteristic(Characteristic.MotionDetected).setValue(false, false, 'RFLink');
+    }
+
+    // Historical data graphing
+
+    if (this.loggingService) {
+      this.loggingService.addEntry({
+        time: Math.round(new Date().valueOf() / 1000),
+        status: this.getCharacteristic(Characteristic.MotionDetected).value
+      });
+      if (packet.command === 'ON') {
+        this.getCharacteristic(CustomCharacteristic.LastActivation)
+          .updateValue(Math.round(new Date().valueOf() / 1000) - this.loggingService.getInitialTime());
       }
     }
+  }
 };
 
 RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
@@ -369,6 +447,45 @@ RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
     var temp = signedToFloat(packet.data.TEMP);
     debug("%s: Setting temperature to %s", this.name, temp);
     this.getCharacteristic(Characteristic.CurrentTemperature).setValue(temp);
+
+    // Historical data graphing
+
+    if (this.loggingService) {
+      var entry = {
+        time: Math.round(new Date().valueOf() / 1000),
+        temp: roundInt(temp)
+      };
+      // debug("THIS", this.device.services[0].constructor.name);
+      var humidity = this.device.services.find(element => element.constructor.name === 'HumiditySensor');
+      if (humidity) {
+        entry.humidity = humidity.getCharacteristic(Characteristic.CurrentRelativeHumidity).value;
+      }
+      this.loggingService.addEntry(entry);
+    }
+
+    // Trigger contract sensor if temperature is over alarmOver
+
+    if (this.alarmOver || this.alarmOver === 0) {
+      // debug('alarmOver %s > %s', temp, this.alarmOver);
+      if (temp > this.alarmOver) {
+        this.alarmOverService.getCharacteristic(Characteristic.ContactSensorState).setValue(Characteristic.ContactSensorState.CONTACT_NOT_DETECTED);
+        this.log.warn('ALARM: %s Temperature exceeded %s > %s', this.displayName, temp, this.alarmOver);
+      } else {
+        this.alarmOverService.getCharacteristic(Characteristic.ContactSensorState).setValue(Characteristic.ContactSensorState.CONTACT_DETECTED);
+      }
+    }
+
+    // Trigger contract sensor if temperature is below alarmUnder
+
+    if (this.alarmUnder || this.alarmUnder === 0) {
+      // debug('alarmUnder %s < %s', temp, this.alarmUnder);
+      if (temp < this.alarmUnder) {
+        this.alarmUnderService.getCharacteristic(Characteristic.ContactSensorState).setValue(Characteristic.ContactSensorState.CONTACT_NOT_DETECTED);
+        this.log.warn('ALARM: %s Temperature below %s < %s', this.displayName, temp, this.alarmUnder);
+      } else {
+        this.alarmUnderService.getCharacteristic(Characteristic.ContactSensorState).setValue(Characteristic.ContactSensorState.CONTACT_DETECTED);
+      }
+    }
   }
 
   this.setBatteryStatus(packet);
@@ -386,28 +503,34 @@ RFLinkAccessory.prototype.parsePacket.HumiditySensor = function(packet) {
   this.setBatteryStatus(packet);
 };
 
-RFLinkAccessory.prototype.serviceWatchdog = function() {
+// Reset watchdog every time a message appears
 
+RFLinkAccessory.prototype.serviceWatchdog = function() {
   if (this.timeout) {
     clearTimeout(this.timeout);
     // debug('Resetting serviceWatchdog:', this.displayName, this.watchdog);
-  } else  {
+  } else {
     debug('Setting serviceWatchdog:', this.displayName, this.watchdog);
   }
 
   this.timeout = setTimeout(this.notResponding.bind(this), this.watchdog * 60 * 1000);
   return (this.timeout);
-}
+};
+
+// Mark non responding devices
 
 RFLinkAccessory.prototype.notResponding = function() {
   this.log.error('ERROR: Device %s %s is not responding:', this.displayName, this.type);
 
-  // Updating the primary characteristic to an error type will mark it as 'Not Responding' in the home app.  
+  // Updating the primary characteristic to an error type will mark it as 'Not Responding' in the home app.
   // To clear the 'Not responding' the characteristic needs to be updated with a valid value.
 
   switch (this.type) {
     case 'TemperatureSensor':
       this.getCharacteristic(Characteristic.CurrentTemperature).updateValue(new Error('Device not responding.'));
+      break;
+    case 'MotionSensor':
+      this.getCharacteristic(Characteristic.MotionDetected).updateValue(new Error('Device not responding.'));
       break;
     case 'HumiditySensor':
       this.getCharacteristic(Characteristic.CurrentRelativeHumidity).updateValue(new Error('Device not responding.'));
@@ -422,4 +545,8 @@ RFLinkAccessory.prototype.notResponding = function() {
     default:
       debug('ERROR: %s is not responding and type %s is not known', this.displayName, this.type);
   }
+};
+
+function roundInt(string) {
+  return Math.round(parseFloat(string) * 10) / 10;
 }
