@@ -254,10 +254,14 @@ function RFLinkAccessory(log, config, controller) {
   }.bind(this));
 
   // Set device information
+  var os = require("os");
+  var hostname = os.hostname();
+  
   this.informationService = new Service.AccessoryInformation();
   this.informationService
     .setCharacteristic(Characteristic.Manufacturer, "RFLink")
     .setCharacteristic(Characteristic.Model, this.protocol)
+    .setCharacteristic(Characteristic.SerialNumber, hostname + "-" + this.address)
     .setCharacteristic(Characteristic.FirmwareRevision, require('./package.json').version);
   //    .setCharacteristic(Characteristic.Version, require('./package.json').version);
 
