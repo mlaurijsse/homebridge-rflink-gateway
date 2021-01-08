@@ -75,7 +75,8 @@ Example config.json:
                     "channel": "TEMP",
                     "type": "TemperatureSensor",
                     "name": "Test temperature",
-                    "alarmOver": 35
+                    "alarmOver": 35,
+                    "history": true
                   },
                   {
                     "channel": "HUM",
