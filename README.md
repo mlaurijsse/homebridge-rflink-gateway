@@ -75,6 +75,7 @@ Example config.json:
                     "channel": "TEMP",
                     "type": "TemperatureSensor",
                     "name": "Test temperature",
+                    "offSet": -4,
                     "alarmOver": 35,
                     "history": true
                   },
@@ -126,6 +127,8 @@ By adding `dimrange` to a channel, the brightness characteristic will be enabled
 `mqttTopic` Optional topic for mqtt messages from your rflink device, defaults to `RFLink/msg`
 
 ### Optional parameters for Temperature Sensors
+
+`offSet`: Optional, adjustment to reported temperature due to local temperature sensor conditions and environment.
 
 `alarmOver`: Optional, Create a fake contact sensor called name + Over Alarm.  Value is temperature in Celsius that if exceeded will trigger the contact sensor.
 

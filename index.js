@@ -210,6 +210,10 @@ function RFLinkAccessory(log, config, controller) {
         this.services.push(service.loggingService);
       }
 
+      if (channel.offSet || channel.offSet === 0) {
+        service.offSet = channel.offSet;
+      }
+
       if (channel.alarmOver || channel.alarmOver === 0) { // Cludge for 0 being false
         service.alarmOver = channel.alarmOver;
         service.alarmOverService = new Service.ContactSensor(channel.name + 'Alarm Over', 'over');
@@ -256,7 +260,7 @@ function RFLinkAccessory(log, config, controller) {
   // Set device information
   var os = require("os");
   var hostname = os.hostname();
-  
+
   this.informationService = new Service.AccessoryInformation();
   this.informationService
     .setCharacteristic(Characteristic.Manufacturer, "RFLink")
@@ -448,7 +452,7 @@ RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
     // debug('This', this);
     this.timeout = this.serviceWatchdog();
     debug("%s: Matched sensor: %s, address: %s, data: %o", this.name, packet.protocol, packet.address, packet.data);
-    var temp = signedToFloat(packet.data.TEMP);
+    var temp = signedToFloat(packet.data.TEMP) + this.offSet;
     debug("%s: Setting temperature to %s", this.name, temp);
     this.getCharacteristic(Characteristic.CurrentTemperature).setValue(temp);
 
