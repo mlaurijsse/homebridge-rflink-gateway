@@ -212,6 +212,8 @@ function RFLinkAccessory(log, config, controller) {
 
       if (channel.offSet || channel.offSet === 0) {
         service.offSet = channel.offSet;
+      } else {
+        service.offSet = 0;
       }
 
       if (channel.alarmOver || channel.alarmOver === 0) { // Cludge for 0 being false
@@ -451,7 +453,7 @@ RFLinkAccessory.prototype.parsePacket.TemperatureSensor = function(packet) {
   if (packet.data && packet.data.TEMP) {
     // debug('This', this);
     this.timeout = this.serviceWatchdog();
-    debug("%s: Matched sensor: %s, address: %s, data: %o", this.name, packet.protocol, packet.address, packet.data);
+    debug("%s: Matched sensor: %s, address: %s, data: %o, offset: %d", this.name, packet.protocol, packet.address, packet.data, this.offSet);
     var temp = signedToFloat(packet.data.TEMP) + this.offSet;
     debug("%s: Setting temperature to %s", this.name, temp);
     this.getCharacteristic(Characteristic.CurrentTemperature).setValue(temp);
