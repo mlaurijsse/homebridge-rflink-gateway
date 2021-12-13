@@ -31,7 +31,8 @@
     "@serialport/parser-readline": "^9.0.1",
     "bluebird": "^3.3.4",
     "mqtt": "4.2.x",
-    "serialport": "^9.0.3"
+    "serialport": "^9.0.3",
+    "fakegato-history": "0.6.x"
   },
   "nodemonConfig": {
     "watch": [],

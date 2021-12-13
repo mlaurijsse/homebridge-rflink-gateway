@@ -228,18 +228,18 @@ RFLinkController.prototype._createMqtt = function () {
               return resolve();
           }
           else {
-              debug("Initializing MQTT Connection");
+              debug("RFLink: Initializing MQTT Connection to \'mqtt://%s\'", self.mqttHost);
               var options = {
                 username: self.mqttUsername || "",
                 password: self.mqttPassword || ""
               }
               self.mqtt = mqttClient.connect('mqtt://' + self.mqttHost, options);
               self.mqtt.on('connect', function() {
-                debug('RFLink: mqtt connect');
+                debug('RFLink: MQTT connected, subscribing to topic \'%s\'', self.mqttTopic);
                 self.mqtt.subscribe(self.mqttTopic);
               });
               self.mqtt.on('message', (topic, message) => {
-                debug("\nMessage: Topic %s -> %s", topic, message.toString());
+                debug("\nRFLink: MQTT Data Topic %s -> %s", topic, message.toString());
                 self._dataHandler(message.toString());
               });
      
